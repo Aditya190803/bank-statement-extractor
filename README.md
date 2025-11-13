@@ -14,7 +14,7 @@ Streamlit application that extracts potential customer names from a bank stateme
 ## Running the app
 
 ```bash
-cd "/home/Adi/Projects/Bank-Statement Extractor"
+cd "Bank-Statement Extractor"
 pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
