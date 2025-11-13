@@ -1,6 +1,6 @@
-CustomerName,CustomerID,Address,AccountNumber,Email
-Alice Johnson,C001,123 Maple Street,111222333,alice@example.com
-Bob Smith,C002,987 Oak Avenue,222333444,bob@example.com
-Carlos Diaz,C003,456 Pine Road,333444555,carlos@example.com
-Danielle Young,C004,321 Birch Lane,444555666,danielle@example.com
-Elaine O'Neil,C005,654 Cedar Blvd,555666777,elaine@example.com
+CustomerName,Employee,CustomerID,Address,AccountNumber,Email
+Alice Johnson,Emily Carter,C001,123 Maple Street,111222333,alice@example.com
+Bob Smith,Emily Carter,C002,987 Oak Avenue,222333444,bob@example.com
+Carlos Diaz,Liam Chen,C003,456 Pine Road,333444555,carlos@example.com
+Danielle Young,Noah Patel,C004,321 Birch Lane,444555666,danielle@example.com
+Elaine O'Neil,Noah Patel,C005,654 Cedar Blvd,555666777,elaine@example.com
