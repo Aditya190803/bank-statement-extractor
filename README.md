@@ -21,8 +21,8 @@ streamlit run streamlit_app.py
 
 ## Usage workflow
 
-1. Upload the bank statement PDF, customer names CSV, and customer details CSV. You can also toggle in bundled sample files for a demo.
-2. Choose which columns in each CSV represent customer names and (optionally) employees. The UI remembers your selections and previews the data.
+1. Upload the bank statement PDF and a single Customers CSV. The CSV must contain a `long_name` column that holds full customer names and may include an optional `sub_broker` column for filtering.
+2. Choose which column in the customers CSV represents the customer name (default preference is `long_name`). If your file includes `sub_broker`, you can filter by one or more sub_broker values.
 3. Adjust the fuzzy-match score threshold or employee filter from the sidebar if needed.
 4. Click **Extract & Match** to generate matches. The app reports extraction counts, match totals, and the match rate.
 5. Review the extracted names, matched customers with confidence scores, and merged customer details. Download either dataset as CSV when ready.
