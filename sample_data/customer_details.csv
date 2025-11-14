@@ -1,6 +1,21 @@
-sub_broker,cl_code,long_name,mobile_pager,pan_gir_no,BOID,DP_Status
-BrokerA,CL001,Alice Johnson,999-111-222,A1B2C3D4E5,BOID0001,Active
-BrokerA,CL002,Bob Smith,999-222-333,F6G7H8I9J0,BOID0002,Active
-BrokerB,CL003,Carlos Diaz,999-333-444,K1L2M3N4O5,BOID0003,Inactive
-BrokerC,CL004,Danielle Young,999-444-555,P6Q7R8S9T0,BOID0004,Active
-BrokerB,CL005,Elaine O'Neil,999-555-666,U1V2W3X4Y5,BOID0005,Active
+sub_broker,cl_code,long_name,mobile_pager,pan_gir_no,BOID,DP_Status,address_line,city,state,postal_code,email,account_type,risk_rating
+BrokerA,CL001,Alice Johnson,999-100-0001,A1B2C3D4E5,BOID0001,Active,12 Garden Street,Mumbai,MH,400001,alice.johnson@example.com,Savings,Low
+BrokerA,CL002,Bob Smith,999-100-0002,B2C3D4E5F6,BOID0002,Active,44 Lakeview Road,Pune,MH,411001,bob.smith@example.com,Current,Medium
+BrokerB,CL003,Carlos Diaz,999-100-0003,C3D4E5F6G7,BOID0003,Inactive,78 Coral Avenue,Hyderabad,TS,500001,carlos.diaz@example.com,Savings,High
+BrokerC,CL004,Danielle Young,999-100-0004,D4E5F6G7H8,BOID0004,Active,9 Summit Residency,Bengaluru,KA,560001,danielle.young@example.com,Savings,Low
+BrokerB,CL005,Elaine O'Neil,999-100-0005,E5F6G7H8I9,BOID0005,Active,21 Willow Lane,Chennai,TN,600002,elaine.oneil@example.com,Current,Medium
+BrokerD,CL006,Franklin Patel,999-100-0006,F6G7H8I9J1,BOID0006,Pending,305 Solaris Park,Ahmedabad,GJ,380015,franklin.patel@example.com,Savings,Medium
+BrokerA,CL007,Grace Lee,999-100-0007,G7H8I9J1K2,BOID0007,Active,14 Orchid Heights,Mumbai,MH,400076,grace.lee@example.com,Current,Low
+BrokerC,CL008,Hassan Khan,999-100-0008,H8I9J1K2L3,BOID0008,Active,82 Riverfront Plaza,Jaipur,RJ,302001,hassan.khan@example.com,Savings,Medium
+BrokerD,CL009,Isabella Rossi,999-100-0009,I9J1K2L3M4,BOID0009,Inactive,7 Azure Meadows,Delhi,DL,110001,isabella.rossi@example.com,Current,High
+BrokerB,CL010,Julian Alvarez,999-100-0010,J1K2L3M4N5,BOID0010,Active,63 Maple Grove,Kolkata,WB,700001,julian.alvarez@example.com,Savings,Low
+BrokerA,CL011,Karen Chen,999-100-0011,K2L3M4N5O6,BOID0011,Active,56 Horizon Towers,Mumbai,MH,400008,karen.chen@example.com,Current,Medium
+BrokerC,CL012,Liam O'Brien,999-100-0012,L3M4N5O6P7,BOID0012,Pending,4 Pinecrest Villas,Chandigarh,CH,160017,liam.obrien@example.com,Savings,Medium
+BrokerD,CL013,Maya Singh,999-100-0013,M4N5O6P7Q8,BOID0013,Active,240 Pearl Residency,Indore,MP,452001,maya.singh@example.com,Savings,Low
+BrokerB,CL014,Nathan Brooks,999-100-0014,N5O6P7Q8R9,BOID0014,Inactive,18 Elm Court,Bhopal,MP,462001,nathan.brooks@example.com,Current,High
+BrokerA,CL015,Olivia Watts,999-100-0015,O6P7Q8R9S1,BOID0015,Active,91 Sunrise Enclave,Mumbai,MH,400050,olivia.watts@example.com,Savings,Low
+BrokerC,CL016,Priya Desai,999-100-0016,P7Q8R9S1T2,BOID0016,Active,120 Crescent Boulevard,Surat,GJ,395003,priya.desai@example.com,Current,Medium
+BrokerD,CL017,Quentin Marsh,999-100-0017,Q8R9S1T2U3,BOID0017,Pending,33 Harbor View,Noida,UP,201301,quentin.marsh@example.com,Savings,Medium
+BrokerB,CL018,Rachel Green,999-100-0018,R9S1T2U3V4,BOID0018,Active,11 Banyan Residency,Thane,MH,400601,rachel.green@example.com,Current,Low
+BrokerA,CL019,Sanjay Mehta,999-100-0019,S1T2U3V4W5,BOID0019,Active,67 Cedar Crest,Nagpur,MH,440001,sanjay.mehta@example.com,Savings,Medium
+BrokerC,CL020,Tatiana Rivera,999-100-0020,T2U3V4W5X6,BOID0020,Inactive,88 Coral Springs,Goa,GA,403001,tatiana.rivera@example.com,Current,High
