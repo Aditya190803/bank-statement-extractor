@@ -23,8 +23,8 @@ APP_ROOT = Path(__file__).resolve().parent
 SAMPLE_DIR = APP_ROOT / "sample_data"
 SAMPLE_FILES = {
     "pdf": SAMPLE_DIR / "bank_statement.pdf",
-    "customers": SAMPLE_DIR / "customer_names.csv",
-    "details": SAMPLE_DIR / "customer_details.csv",
+    # Single CSV that contains both names and additional customer details
+    "customers": SAMPLE_DIR / "customer_details.csv",
 }
 
 _NAME_PUNCT_TRANSLATOR = str.maketrans("", "", string.punctuation)
@@ -48,11 +48,25 @@ def extract_pdf_text(pdf_bytes: bytes) -> str:
     return "\n".join(text_chunks)
 
 
+def sanitize_text(text: str) -> str:
+    """Sanitize arbitrary PDF-extracted text before regex matches.
+
+    - Remove non-printable characters
+    - Normalize whitespace
+    """
+    if not text:
+        return ""
+    printable = "".join(ch for ch in text if ch.isprintable())
+    printable = re.sub(r"\s+", " ", printable)
+    return printable.strip()
+
+
 def extract_candidate_names(text: str) -> List[str]:
     """Pull out likely customer names from raw PDF text."""
     if not text:
         return []
 
+    # Use patterns that detect title-case and all-caps name phrases
     title_case_pattern = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b")
     all_caps_pattern = re.compile(r"\b([A-Z]{2,}(?:\s+[A-Z]{2,}){1,3})\b")
 
@@ -68,6 +82,7 @@ def extract_candidate_names(text: str) -> List[str]:
         if _is_plausible_name(cleaned):
             candidates.add(cleaned)
 
+    # Return sorted unique list, in their original form; normalization happens later
     return sorted(candidates)
 
 
@@ -175,20 +190,20 @@ def match_names(
 
 def merge_with_details(
     matches: pd.DataFrame,
-    details: pd.DataFrame,
-    details_name_column: str,
+    customers: pd.DataFrame,
+    customers_name_column: str,
 ) -> pd.DataFrame:
     """Merge matched names with their additional details."""
     if matches.empty:
         return matches
     merged = matches.merge(
-        details,
+        customers,
         left_on="Matched Customer",
-        right_on=details_name_column,
+        right_on=customers_name_column,
         how="left",
     )
-    if details_name_column in merged.columns:
-        merged.drop(columns=[details_name_column], inplace=True)
+    if customers_name_column in merged.columns:
+        merged.drop(columns=[customers_name_column], inplace=True)
     return merged
 
 
@@ -235,31 +250,18 @@ def main() -> None:
         disabled=use_samples,
     )
 
-    col1, col2 = st.columns(2)
-    with col1:
-        customer_file = st.file_uploader(
-            "Customer Names (CSV)",
-            type=["csv"],
-            accept_multiple_files=False,
-            key="customer-csv",
-            help="Upload the customer listing. You'll map the name column after upload.",
-            disabled=use_samples,
-        )
-    with col2:
-        details_file = st.file_uploader(
-            "Customer Details (CSV)",
-            type=["csv"],
-            accept_multiple_files=False,
-            key="details-csv",
-            help="Upload supporting customer details. Column mapping is configured below.",
-            disabled=use_samples,
-        )
+    customers_file = st.file_uploader(
+        "Customers (CSV) — names and details in one file",
+        type=["csv"],
+        accept_multiple_files=False,
+        key="customers-csv",
+        help="Upload a single CSV containing CustomerName and any detail columns (including optional employee/filter column).",
+        disabled=use_samples,
+    )
 
     pdf_bytes: Optional[bytes] = None
     customers_df: Optional[pd.DataFrame] = None
-    details_df: Optional[pd.DataFrame] = None
-    customer_error: Optional[str] = None
-    details_error: Optional[str] = None
+    customers_error: Optional[str] = None
 
     if use_samples:
         missing = [label for label, path in SAMPLE_FILES.items() if not path.exists()]
@@ -273,149 +275,93 @@ def main() -> None:
             try:
                 customers_df = load_csv(SAMPLE_FILES["customers"].read_bytes())
             except Exception as exc:
-                customer_error = str(exc)
-            try:
-                details_df = load_csv(SAMPLE_FILES["details"].read_bytes())
-            except Exception as exc:
-                details_error = str(exc)
+                customers_error = str(exc)
             st.info(
                 "Using bundled demo files from the `sample_data` directory. Toggle off to upload your own."
             )
     else:
         if pdf_file is not None:
             pdf_bytes = pdf_file.getvalue()
-        if customer_file is not None:
+        if customers_file is not None:
             try:
-                customers_df = load_csv(customer_file.getvalue())
+                customers_df = load_csv(customers_file.getvalue())
             except Exception as exc:
-                customer_error = str(exc)
-        if details_file is not None:
-            try:
-                details_df = load_csv(details_file.getvalue())
-            except Exception as exc:
-                details_error = str(exc)
+                customers_error = str(exc)
 
     if show_file_details:
         st.subheader("📋 File Details Preview")
         if customers_df is not None:
-            st.write("**Customer Names:**")
+            st.write("**Customers (combined CSV):**")
             st.dataframe(customers_df, use_container_width=True, hide_index=True)
-        elif customer_error:
-            st.error(f"Unable to preview customer names CSV: {customer_error}")
+        elif customers_error:
+            st.error(f"Unable to preview the customers CSV: {customers_error}")
         else:
-            st.info("Upload a customer names CSV to preview its contents.")
-
-        if details_df is not None:
-            st.write("**Customer Details:**")
-            st.dataframe(details_df, use_container_width=True, hide_index=True)
-        elif details_error:
-            st.error(f"Unable to preview customer details CSV: {details_error}")
-        else:
-            st.info("Upload a customer details CSV to preview its contents.")
+            st.info("Upload a customers CSV to preview its contents.")
 
     st.subheader("2. Map columns")
     customer_name_column: Optional[str] = None
-    details_name_column: Optional[str] = None
-    employee_column: Optional[str] = None
-    employee_filter_value: str = "__all__"
+    # We use 'sub_broker' filtering via a dedicated multi-select below
 
-    if customer_error and not show_file_details:
-        st.error(f"Unable to read the customer names CSV: {customer_error}")
-    if details_error and not show_file_details:
-        st.error(f"Unable to read the details CSV: {details_error}")
+    if customers_error and not show_file_details:
+        st.error(f"Unable to read the customers CSV: {customers_error}")
 
-    if customers_df is None or details_df is None:
-        st.info("Upload both customer CSV files to configure column mappings.")
+    if customers_df is None:
+        st.info("Upload the customers CSV to configure column mappings.")
     else:
         customer_columns = list(customers_df.columns)
-        details_columns = list(details_df.columns)
 
         _ensure_session_state_option(
-            "customer_name_column",
-            customer_columns,
-            preferred=["CustomerName", "Customer Name", "Name"],
-        )
+                "customer_name_column",
+                customer_columns,
+                preferred=["long_name", "CustomerName", "Customer Name", "Name"],
+            )
         customer_name_column = st.selectbox(
-            "Customer names column (names CSV)",
+            "Customer names column (customers CSV)",
             customer_columns,
             key="customer_name_column",
-            help="Select the column that contains customer names in the uploaded customer names CSV.",
+            help="Select the column that contains customer names in the uploaded customers CSV.",
         )
 
-        _ensure_session_state_option(
-            "details_name_column",
-            details_columns,
-            preferred=["CustomerName", "Customer Name", "Name"],
-        )
-        details_name_column = st.selectbox(
-            "Customer names column (details CSV)",
-            details_columns,
-            key="details_name_column",
-            help="Select the column that contains customer names in the customer details CSV.",
-        )
+        # For a single customers CSV we only need to select the name column once
 
-        employee_column_options = [None] + details_columns
-        preferred_employee = next(
-            (column for column in details_columns if "employee" in column.lower()),
-            None,
-        )
-        if st.session_state.get("employee_column") not in employee_column_options:
-            st.session_state["employee_column"] = preferred_employee
+        # We no longer ask users to pick a generic filter column - use sub_broker multi-select instead
 
-        employee_column = st.selectbox(
-            "Employee column (optional)",
-            employee_column_options,
-            format_func=lambda value: "— No employee filtering —" if value is None else value,
-            key="employee_column",
-            help="If selected, the app filters both CSVs to the chosen employee before matching.",
-        )
-
-        if employee_column:
-            employee_counts_df = (
-                details_df[[employee_column, details_name_column]]
-                .dropna(subset=[details_name_column])
+        # If the dataset contains a 'sub_broker' column we allow multi-selection
+        sub_broker_col_present = "sub_broker" in customer_columns
+        selected_sub_brokers = []
+        if sub_broker_col_present:
+            sub_broker_options = sorted(customers_df["sub_broker"].dropna().astype(str).unique())
+            selected_sub_brokers = st.multiselect(
+                "Filter by sub_broker (multi-select)",
+                options=sub_broker_options,
+                default=sub_broker_options,
+                help="Limit matching to customers for the selected sub_broker(s).",
+            )
+            filter_counts_df = (
+                customers_df[["sub_broker", customer_name_column]]
+                .dropna(subset=[customer_name_column])
                 .copy()
             )
-            employee_counts_df[employee_column] = _stringify_series(
-                employee_counts_df[employee_column]
+            filter_counts_df["sub_broker"] = _stringify_series(
+                filter_counts_df["sub_broker"]
             )
-            employee_counts_df[details_name_column] = _stringify_series(
-                employee_counts_df[details_name_column]
+            filter_counts_df[customer_name_column] = _stringify_series(
+                filter_counts_df[customer_name_column]
             )
-            employee_counts_df = employee_counts_df[employee_counts_df[employee_column] != ""]
+            filter_counts_df = filter_counts_df[filter_counts_df["sub_broker"] != ""]
 
-            employee_counts = (
-                employee_counts_df.groupby(employee_column)[details_name_column]
+            filter_counts = (
+                filter_counts_df.groupby("sub_broker")[customer_name_column]
                 .nunique()
                 .sort_index()
             )
-            total_unique_customers = int(employee_counts_df[details_name_column].nunique())
+            total_unique_customers = int(filter_counts_df[customer_name_column].nunique())
 
-            if not employee_counts.empty:
-                employee_filter_options = ["__all__"] + employee_counts.index.tolist()
-                if st.session_state.get("employee_filter_value") not in employee_filter_options:
-                    st.session_state["employee_filter_value"] = "__all__"
-
-                def _format_employee_choice(value: str) -> str:
-                    if value == "__all__":
-                        suffix = "customer" if total_unique_customers == 1 else "customers"
-                        return f"All employees ({total_unique_customers} {suffix})"
-                    count = int(employee_counts.loc[value])
-                    suffix = "customer" if count == 1 else "customers"
-                    return f"{value} ({count} {suffix})"
-
-                employee_filter_value = st.selectbox(
-                    "Filter customers by employee",
-                    employee_filter_options,
-                    key="employee_filter_value",
-                    format_func=_format_employee_choice,
-                    help="Choose an employee to limit matching to their customers only.",
-                )
-            else:
-                st.info("No employee values detected in the selected column.")
-                st.session_state["employee_filter_value"] = "__all__"
+            if filter_counts.empty:
+                st.info("No values detected in the 'sub_broker' column for filtering.")
         else:
-            st.session_state.pop("employee_filter_value", None)
+            # no selection or values in 'sub_broker', clear any previous selection state
+            st.session_state.pop("filter_column", None)
 
     st.markdown("---")
     if st.button("Extract & Match", type="primary", use_container_width=True):
@@ -423,26 +369,19 @@ def main() -> None:
             st.warning("Please upload a bank statement PDF before processing.")
             return
         if customers_df is None:
-            if customer_error:
-                st.error(f"Unable to read the customer names CSV: {customer_error}")
+            if customers_error:
+                st.error(f"Unable to read the customers CSV: {customers_error}")
             else:
-                st.warning("Please upload a customer names CSV before processing.")
+                st.warning("Please upload a customers CSV before processing.")
             return
-        if details_df is None:
-            if details_error:
-                st.error(f"Unable to read the details CSV: {details_error}")
-            else:
-                st.warning("Please upload a customer details CSV before processing.")
-            return
-        if not customer_name_column or not details_name_column:
-            st.warning("Select the customer name columns before processing.")
+        if not customer_name_column:
+            st.warning("Select the customer name column before processing.")
             return
 
         candidate_names: List[str] = []
         matches_df = pd.DataFrame()
         merged_df = pd.DataFrame()
         statement_text = ""
-        applied_employee_filter: Optional[str] = None
 
         with st.spinner("Extracting text and running matches..."):
             try:
@@ -451,55 +390,28 @@ def main() -> None:
                 st.error(f"Unable to extract text from the PDF: {exc}")
                 return
 
-            candidate_names = extract_candidate_names(statement_text)
+                # Sanitize the extracted text before running name regexes
+                statement_text = sanitize_text(statement_text)
+                candidate_names = extract_candidate_names(statement_text)
 
             filtered_customers_df = customers_df.copy()
-            filtered_details_df = details_df.copy()
-            current_employee_filter = employee_filter_value
-
-            if employee_column and current_employee_filter != "__all__":
-                normalized_details_employee = _stringify_series(
-                    filtered_details_df[employee_column]
-                )
-                filter_mask = normalized_details_employee == current_employee_filter
-                filtered_details_df = filtered_details_df.loc[filter_mask].copy()
-                applied_employee_filter = current_employee_filter
-
-                if filtered_details_df.empty:
-                    st.warning(
-                        f"No customer records found for employee '{current_employee_filter}'."
-                    )
-                    return
-
-                allowed_names_series = _stringify_series(
-                    filtered_details_df[details_name_column]
-                )
-                allowed_names = set(allowed_names_series[allowed_names_series != ""])
-                if not allowed_names:
-                    st.warning(
-                        "No valid customer names available for the selected employee."
-                    )
-                    return
-
-                customer_names_series = _stringify_series(
-                    filtered_customers_df[customer_name_column]
-                )
-                filtered_customers_df = filtered_customers_df.loc[
-                    customer_names_series.isin(allowed_names)
-                ].copy()
-
-                if filtered_customers_df.empty:
-                    st.warning(
-                        "No customer names found in the names CSV for the selected employee."
-                    )
-                    return
-            else:
-                applied_employee_filter = None
+            applied_filter: Optional[list] = None
+            # Apply sub_broker multi-select filter if available and a subset is selected
+            if sub_broker_col_present and selected_sub_brokers:
+                if set(selected_sub_brokers) != set(sub_broker_options):
+                    normalized_sub_broker = _stringify_series(filtered_customers_df["sub_broker"])
+                    filter_mask = normalized_sub_broker.isin(selected_sub_brokers)
+                    filtered_customers_df = filtered_customers_df.loc[filter_mask].copy()
+                    applied_filter = list(selected_sub_brokers)
+                    if filtered_customers_df.empty:
+                        st.warning(
+                            f"No customer records found for the selected sub_broker(s): {', '.join(selected_sub_brokers)}."
+                        )
+                        return
 
             filtered_customers_df = filtered_customers_df.drop_duplicates(
                 subset=[customer_name_column]
             )
-
             matches_df = match_names(
                 candidate_names,
                 filtered_customers_df,
@@ -508,8 +420,8 @@ def main() -> None:
             )
             merged_df = merge_with_details(
                 matches_df,
-                filtered_details_df,
-                details_name_column,
+                filtered_customers_df,
+                customer_name_column,
             )
 
         st.subheader("2. Extracted names")
@@ -521,11 +433,11 @@ def main() -> None:
             st.info("No plausible customer names were found in the uploaded PDF.")
 
         st.subheader("3. Matched customers")
-        if employee_column:
-            if applied_employee_filter:
-                st.caption(f"Employee filter applied: {applied_employee_filter}")
+        if sub_broker_col_present:
+            if applied_filter:
+                st.caption(f"Sub-broker filter applied: {', '.join(applied_filter)}")
             else:
-                st.caption("Employee filter: all employees")
+                st.caption("Sub-broker filter: all sub_brokers")
 
         total_extracted = len(candidate_names)
         total_matches = len(matches_df)

@@ -1,6 +1,6 @@
-CustomerName,Employee,CustomerID,Address,AccountNumber,Email
-Alice Johnson,Emily Carter,C001,123 Maple Street,111222333,alice@example.com
-Bob Smith,Emily Carter,C002,987 Oak Avenue,222333444,bob@example.com
-Carlos Diaz,Liam Chen,C003,456 Pine Road,333444555,carlos@example.com
-Danielle Young,Noah Patel,C004,321 Birch Lane,444555666,danielle@example.com
-Elaine O'Neil,Noah Patel,C005,654 Cedar Blvd,555666777,elaine@example.com
+sub_broker,cl_code,long_name,mobile_pager,pan_gir_no,BOID,DP_Status
+BrokerA,CL001,Alice Johnson,999-111-222,A1B2C3D4E5,BOID0001,Active
+BrokerA,CL002,Bob Smith,999-222-333,F6G7H8I9J0,BOID0002,Active
+BrokerB,CL003,Carlos Diaz,999-333-444,K1L2M3N4O5,BOID0003,Inactive
+BrokerC,CL004,Danielle Young,999-444-555,P6Q7R8S9T0,BOID0004,Active
+BrokerB,CL005,Elaine O'Neil,999-555-666,U1V2W3X4Y5,BOID0005,Active
