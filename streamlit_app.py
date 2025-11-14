@@ -31,9 +31,28 @@ _NAME_PUNCT_TRANSLATOR = str.maketrans("", "", string.punctuation)
 
 
 @st.cache_data(show_spinner=False)
-def load_csv(data: bytes) -> pd.DataFrame:
-    """Load a CSV file from raw bytes."""
-    return pd.read_csv(io.BytesIO(data))
+def load_tabular_data(data: bytes, filename: Optional[str] = None) -> pd.DataFrame:
+    """Load a CSV or Excel file from raw bytes."""
+    buffer = io.BytesIO(data)
+    suffix = ""
+    if filename:
+        suffix = Path(filename).suffix.lower()
+
+    if suffix in {".xlsx", ".xls", ".xlsm"}:
+        buffer.seek(0)
+        return pd.read_excel(buffer)
+
+    if suffix == ".csv":
+        buffer.seek(0)
+        return pd.read_csv(buffer)
+
+    # Fallback: try CSV first, then Excel if CSV parsing fails.
+    buffer.seek(0)
+    try:
+        return pd.read_csv(buffer)
+    except Exception:
+        buffer.seek(0)
+        return pd.read_excel(buffer)
 
 
 def extract_pdf_text(pdf_bytes: bytes) -> str:
@@ -44,7 +63,10 @@ def extract_pdf_text(pdf_bytes: bytes) -> str:
         )
 
     with fitz.open(stream=pdf_bytes, filetype="pdf") as document:
-        text_chunks = [page.get_text("text") for page in document]
+        text_chunks = []
+        for page_index in range(document.page_count):
+            page = document.load_page(page_index)
+            text_chunks.append(page.get_text("text"))
     return "\n".join(text_chunks)
 
 
@@ -57,6 +79,9 @@ def sanitize_text(text: str) -> str:
     if not text:
         return ""
     printable = "".join(ch for ch in text if ch.isprintable())
+    # Insert spacing between characters when PDFs omit column gaps (e.g. letter-digit joins).
+    printable = re.sub(r"(?<=[A-Za-z])(?=\d)", " ", printable)
+    printable = re.sub(r"(?<=\d)(?=[A-Za-z])", " ", printable)
     printable = re.sub(r"\s+", " ", printable)
     return printable.strip()
 
@@ -66,11 +91,26 @@ def extract_candidate_names(text: str) -> List[str]:
     if not text:
         return []
 
-    # Use patterns that detect title-case and all-caps name phrases
-    title_case_pattern = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b")
-    all_caps_pattern = re.compile(r"\b([A-Z]{2,}(?:\s+[A-Z]{2,}){1,3})\b")
+    # Support name components with hyphens or apostrophes (e.g. O'Neil, Rivera-Santos)
+    name_word = r"[A-Z][a-z]+(?:['-][A-Z][a-z]+)?"
+
+    # Detect standalone title-case and all-caps name phrases
+    title_case_pattern = re.compile(
+        rf"({name_word}(?:\s+{name_word}){{1,3}})(?=[^A-Za-z]|$)"
+    )
+    all_caps_pattern = re.compile(r"\b([A-Z]{2,}(?:\s+[A-Z]{2,}){1,3})(?=[^A-Z]|$)")
+
+    # Focus on transactional phrases that explicitly reference customers
+    transaction_pattern = re.compile(
+        rf"(?:ACH Payment to|Transfer to|Transfer from|Wire transfer from)\s+({name_word}(?:\s+{name_word}){{1,3}})"
+    )
 
     candidates = set()
+
+    for match in transaction_pattern.findall(text):
+        cleaned = match.strip()
+        if _is_plausible_name(cleaned):
+            candidates.add(cleaned)
 
     for match in title_case_pattern.findall(text):
         cleaned = match.strip()
@@ -251,8 +291,8 @@ def main() -> None:
     )
 
     customers_file = st.file_uploader(
-        "Customers (CSV) — names and details in one file",
-        type=["csv"],
+        "Customers (CSV or Excel) — names and details in one file",
+        type=["csv", "xlsx", "xls", "xlsm"],
         accept_multiple_files=False,
         key="customers-csv",
         help="Upload a single CSV containing CustomerName and any detail columns (including optional employee/filter column).",
@@ -273,7 +313,10 @@ def main() -> None:
         else:
             pdf_bytes = SAMPLE_FILES["pdf"].read_bytes()
             try:
-                customers_df = load_csv(SAMPLE_FILES["customers"].read_bytes())
+                customers_df = load_tabular_data(
+                    SAMPLE_FILES["customers"].read_bytes(),
+                    SAMPLE_FILES["customers"].name,
+                )
             except Exception as exc:
                 customers_error = str(exc)
             st.info(
@@ -284,7 +327,10 @@ def main() -> None:
             pdf_bytes = pdf_file.getvalue()
         if customers_file is not None:
             try:
-                customers_df = load_csv(customers_file.getvalue())
+                customers_df = load_tabular_data(
+                    customers_file.getvalue(),
+                    customers_file.name,
+                )
             except Exception as exc:
                 customers_error = str(exc)
 
@@ -292,7 +338,7 @@ def main() -> None:
         st.subheader("📋 File Details Preview")
         if customers_df is not None:
             st.write("**Customers (combined CSV):**")
-            st.dataframe(customers_df, use_container_width=True, hide_index=True)
+            st.dataframe(customers_df, width='stretch', hide_index=True)
         elif customers_error:
             st.error(f"Unable to preview the customers CSV: {customers_error}")
         else:
@@ -364,7 +410,7 @@ def main() -> None:
             st.session_state.pop("filter_column", None)
 
     st.markdown("---")
-    if st.button("Extract & Match", type="primary", use_container_width=True):
+    if st.button("Extract & Match", type="primary", width="stretch"):
         if pdf_bytes is None:
             st.warning("Please upload a bank statement PDF before processing.")
             return
@@ -390,9 +436,8 @@ def main() -> None:
                 st.error(f"Unable to extract text from the PDF: {exc}")
                 return
 
-                # Sanitize the extracted text before running name regexes
-                statement_text = sanitize_text(statement_text)
-                candidate_names = extract_candidate_names(statement_text)
+            statement_text = sanitize_text(statement_text)
+            candidate_names = extract_candidate_names(statement_text)
 
             filtered_customers_df = customers_df.copy()
             applied_filter: Optional[list] = None
@@ -428,7 +473,7 @@ def main() -> None:
         st.caption("Names detected in the PDF after basic cleaning.")
         if candidate_names:
             extracted_preview = pd.DataFrame({"Extracted Names": candidate_names})
-            st.dataframe(extracted_preview, use_container_width=True, hide_index=True)
+            st.dataframe(extracted_preview, width="stretch", hide_index=True)
         else:
             st.info("No plausible customer names were found in the uploaded PDF.")
 
@@ -448,12 +493,12 @@ def main() -> None:
 
         if matches_df.empty:
             st.warning(
-                "No matches cleared the selected score threshold. Try adjusting the score, employee filter, or reviewing the input data."
+                "No matches cleared the selected score threshold. Try adjusting the score, sub_broker filter, or reviewing the input data."
             )
             return
 
         st.success(f"Matched {len(matches_df)} customer(s) with a minimum score of {threshold}%.")
-        st.dataframe(matches_df, use_container_width=True, hide_index=True)
+        st.dataframe(matches_df, width="stretch", hide_index=True)
 
         matches_csv = matches_df.to_csv(index=False).encode("utf-8")
         st.download_button(
@@ -467,7 +512,7 @@ def main() -> None:
         if merged_df.empty:
             st.info("No additional details were found for the matched customers.")
         else:
-            st.dataframe(merged_df, use_container_width=True, hide_index=True)
+            st.dataframe(merged_df, width="stretch", hide_index=True)
             details_csv = merged_df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 label="Download matched details CSV",
