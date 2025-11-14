@@ -1,9 +1,11 @@
 """Generate a multi-page sample bank statement PDF with structured tables."""
 from __future__ import annotations
 
+import csv
 import random
 from datetime import date, timedelta
 from pathlib import Path
+from typing import List
 
 import fitz  # PyMuPDF
 
@@ -13,7 +15,7 @@ MARGIN_TOP = 60
 MARGIN_BOTTOM = 40
 ROW_HEIGHT = 20
 ROWS_PER_PAGE = 26  # allows room for header/footer
-TOTAL_PAGES = 50
+TOTAL_PAGES = 33
 TOTAL_ROWS = ROWS_PER_PAGE * TOTAL_PAGES
 
 STATEMENT_TITLE = "Fidelity Federal Banking Group"
@@ -29,14 +31,6 @@ COLUMNS = (
     ("Credit", MARGIN_X + 430),
     ("Balance", MARGIN_X + 500),
 )
-
-CUSTOMER_NAMES = [
-    "Alice Johnson",
-    "Bob Smith",
-    "Carlos Diaz",
-    "Danielle Young",
-    "Elaine O'Neil",
-]
 
 COUNTERPARTIES = [
     "Lakeside Market",
@@ -54,14 +48,40 @@ COUNTERPARTIES = [
 BASE_DATE = date(2024, 1, 1)
 
 
-def build_transactions() -> list[dict[str, str]]:
+def _load_customer_names() -> List[str]:
+    """Load all customer names from the sample CSV for PDF generation."""
+    csv_path = Path(__file__).resolve().parent.parent / "sample_data" / "customer_details.csv"
+    if not csv_path.exists():
+        return []
+
+    names: List[str] = []
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            name = (row.get("long_name") or "").strip()
+            if name:
+                names.append(name)
+    return names
+
+
+def build_transactions(customer_names: List[str]) -> list[dict[str, str]]:
     """Create a list of synthetic bank transactions."""
     transactions: list[dict[str, str]] = []
     running_balance = 12500.00
 
+    if not customer_names:
+        # Fallback to a small static set when the CSV is missing or empty.
+        customer_names = [
+            "Alice Johnson",
+            "Bob Smith",
+            "Carlos Diaz",
+            "Danielle Young",
+            "Elaine O'Neil",
+        ]
+
     for index in range(TOTAL_ROWS):
         tx_date = BASE_DATE + timedelta(days=index % 90)
-        customer = CUSTOMER_NAMES[index % len(CUSTOMER_NAMES)]
+        customer = customer_names[index % len(customer_names)]
         counterparty = random.choice(COUNTERPARTIES)
         reference = f"TX-{tx_date.strftime('%y%m%d')}-{index:05d}"
 
@@ -126,7 +146,8 @@ def add_page_footer(page: fitz.Page) -> None:
 
 
 def write_transactions(path: Path) -> None:
-    transactions = build_transactions()
+    customer_names = _load_customer_names()
+    transactions = build_transactions(customer_names)
     doc = fitz.open()
 
     row_index = 0
